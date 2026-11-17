@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
+  Alert,
   StatusBar,
   useWindowDimensions,
   Image
@@ -16,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 
 import { StorageService } from './src/services/storage';
+import { showMessage } from './src/services/validation';
 import CreatePetScreen from './src/screens/CreatePetScreen';
 import PetAvatarCard from './src/components/PetAvatarCard';
 import DietScreen from './src/screens/DietScreen';
@@ -48,14 +50,19 @@ export default function App() {
     setLoading(false);
   };
 
+  const toastTimer = useRef(null);
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
+
   const showToast = (toastData) => {
+    clearTimeout(toastTimer.current);
     setInAppToast(toastData);
-    setTimeout(() => {
+    toastTimer.current = setTimeout(() => {
       setInAppToast((current) => (current === toastData ? null : current));
     }, 5500);
   };
 
-  const activePet = pets.find(p => p.id === activePetId) || null;
+  // Se o id ativo não existir mais, cai para o primeiro pet (evita tela quebrada).
+  const activePet = pets.find(p => p.id === activePetId) || pets[0] || null;
 
   const handleSaveNewPet = async (petData) => {
     const newState = await StorageService.addPet(petData);
@@ -75,23 +82,28 @@ export default function App() {
     setIsEditingCurrentPet(false);
   };
 
-  const handleDeleteCurrentPet = async () => {
+  const performDelete = async (pet) => {
+    const newState = await StorageService.deletePet(pet.id);
+    setPets(newState.pets);
+    setActivePetId(newState.activePetId);
+    showToast({
+      title: `🗑️ ${pet.name} removido`,
+      body: 'O perfil foi excluído do armazenamento local.',
+      type: 'info'
+    });
+  };
+
+  const handleDeleteCurrentPet = () => {
     if (!activePet) return;
-    const confirmMsg = `Deseja remover o perfil de ${activePet.name}?`;
-    let proceed = true;
+    const pet = activePet;
+    const confirmMsg = `Deseja remover o perfil de ${pet.name}? Esta ação não pode ser desfeita.`;
     if (Platform.OS === 'web') {
-      proceed = window.confirm(confirmMsg);
-    }
-    if (proceed) {
-      const removedName = activePet.name;
-      const newState = await StorageService.deletePet(activePet.id);
-      setPets(newState.pets);
-      setActivePetId(newState.activePetId);
-      showToast({
-        title: `🗑️ ${removedName} removido`,
-        body: 'O perfil foi excluído do armazenamento local.',
-        type: 'info'
-      });
+      if (window.confirm(confirmMsg)) performDelete(pet);
+    } else {
+      Alert.alert('Excluir perfil', confirmMsg, [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Excluir', style: 'destructive', onPress: () => performDelete(pet) },
+      ]);
     }
   };
 
@@ -99,11 +111,11 @@ export default function App() {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        alert('Permita o acesso à galeria para escolher foto!');
+        showMessage(Platform, Alert, 'Permissão', 'Permita o acesso à galeria para escolher foto!');
         return;
       }
       const res = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8

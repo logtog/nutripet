@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { NutritionEngine } from '../services/nutritionEngine';
 import { NotificationService } from '../services/notificationService';
 import { FOOD_SAFETY_GUIDE } from '../data/database';
+import { validateDiet, showMessage } from '../services/validation';
 
 export default function DietScreen({ pet, diet, onUpdateDiet, onShowToast }) {
   const { width } = useWindowDimensions();
@@ -63,12 +64,14 @@ export default function DietScreen({ pet, diet, onUpdateDiet, onShowToast }) {
   };
 
   const handleSaveDietConfig = () => {
+    const check = validateDiet({ brandName, startDate, mealInterval, dailyGrams });
+    if (!check.ok) {
+      showMessage(Platform, Alert, 'Atenção', check.message);
+      return;
+    }
     onUpdateDiet({
       ...diet,
-      brandName,
-      startDate,
-      mealIntervalHours: parseInt(mealInterval, 10) || 8,
-      dailyGrams: parseInt(dailyGrams, 10) || 200
+      ...check.values
     });
     if (onShowToast) {
       onShowToast({

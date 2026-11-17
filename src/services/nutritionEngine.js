@@ -1,19 +1,23 @@
 import { BREEDS_DATABASE } from '../data/database';
 
+const DAY_MS = 1000 * 60 * 60 * 24;
+
 export const NutritionEngine = {
-  // Calcula quantos dias o pet está consumindo a mesma ração
-  getDaysOnCurrentFood: (startDateString) => {
+  // Calcula quantos dias o pet está consumindo a mesma ração.
+  // Data ausente, inválida ou no futuro conta como 0 dias.
+  getDaysOnCurrentFood: (startDateString, now = new Date()) => {
     if (!startDateString) return 0;
     const start = new Date(startDateString);
-    const now = new Date();
-    const diffTime = Math.abs(now - start);
-    return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    if (Number.isNaN(start.getTime())) return 0;
+    const diff = now - start;
+    return diff > 0 ? Math.floor(diff / DAY_MS) : 0;
   },
 
   // Próxima refeição com base no intervalo e última refeição
   getNextMealTime: (lastMealIso, intervalHours) => {
     if (!lastMealIso) return new Date();
     const last = new Date(lastMealIso);
+    if (Number.isNaN(last.getTime())) return new Date();
     const next = new Date(last.getTime() + (intervalHours || 8) * 60 * 60 * 1000);
     return next;
   },
@@ -48,12 +52,13 @@ export const NutritionEngine = {
   },
 
   // Previsão do próximo ciclo de cio para não castrados
-  calculateNextHeatCycle: (lastHeatDateString, cycleDays = 180) => {
+  // Retorna null se a data for ausente ou inválida (antes, uma data inválida derrubava o app).
+  calculateNextHeatCycle: (lastHeatDateString, cycleDays = 180, now = new Date()) => {
     if (!lastHeatDateString) return null;
     const last = new Date(lastHeatDateString);
-    const next = new Date(last.getTime() + cycleDays * 24 * 60 * 60 * 1000);
-    const now = new Date();
-    const diffDays = Math.ceil((next - now) / (1000 * 60 * 60 * 24));
+    if (Number.isNaN(last.getTime())) return null;
+    const next = new Date(last.getTime() + cycleDays * DAY_MS);
+    const diffDays = Math.ceil((next - now) / DAY_MS);
 
     return {
       nextDate: next.toISOString().split('T')[0],

@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { NutritionEngine } from '../services/nutritionEngine';
 import { NotificationService } from '../services/notificationService';
+import { isValidDateString, showMessage } from '../services/validation';
 
 export default function HealthScreen({ pet, vaccines, onUpdateVaccines, onShowToast }) {
   const { width } = useWindowDimensions();
@@ -45,9 +46,12 @@ export default function HealthScreen({ pet, vaccines, onUpdateVaccines, onShowTo
 
   const handleAddVaccine = () => {
     if (!newVacName.trim()) {
-      const msg = 'Informe o nome da vacina!';
-      if (Platform.OS === 'web') alert(msg);
-      else Alert.alert('Atenção', msg);
+      showMessage(Platform, Alert, 'Atenção', 'Informe o nome da vacina!');
+      return;
+    }
+    const dueDate = newVacDate.trim();
+    if (dueDate && !isValidDateString(dueDate)) {
+      showMessage(Platform, Alert, 'Atenção', 'Data do reforço inválida. Use o formato AAAA-MM-DD (ex: 2027-05-15).');
       return;
     }
 
@@ -55,7 +59,7 @@ export default function HealthScreen({ pet, vaccines, onUpdateVaccines, onShowTo
       id: Date.now().toString(),
       name: newVacName.trim(),
       dateApplied: new Date().toISOString().split('T')[0],
-      nextDueDate: newVacDate || '2027-01-01',
+      nextDueDate: dueDate || '2027-01-01',
       done: true
     };
 
@@ -130,6 +134,13 @@ export default function HealthScreen({ pet, vaccines, onUpdateVaccines, onShowTo
 
                 <Text style={styles.heatTip}>
                   💡 Dica Veterinária: Durante o cio, evite passeios sem guia e mantenha hidratação reforçada.
+                </Text>
+              </View>
+            ) : !pet.isNeutered && pet.gender === 'female' ? (
+              <View style={styles.neuteredBox}>
+                <Text style={styles.neuteredTitle}>Data do último cio não informada</Text>
+                <Text style={styles.neuteredDesc}>
+                  Edite o perfil de {pet.name} e informe a data aproximada do último cio para ver a previsão do próximo.
                 </Text>
               </View>
             ) : (

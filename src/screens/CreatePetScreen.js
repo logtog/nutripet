@@ -14,6 +14,13 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { BREEDS_DATABASE, DEFAULT_VACCINES } from '../data/database';
+import {
+  LIMITS,
+  isValidDateString,
+  parseDecimal,
+  validateDiet,
+  showMessage,
+} from '../services/validation';
 
 export default function CreatePetScreen({ onSavePet, onCancel, existingPet = null }) {
   const { width } = useWindowDimensions();
@@ -59,7 +66,7 @@ export default function CreatePetScreen({ onSavePet, onCancel, existingPet = nul
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8
@@ -104,19 +111,31 @@ export default function CreatePetScreen({ onSavePet, onCancel, existingPet = nul
   };
 
   const handleSave = () => {
-    if (!name.trim()) {
-      const msg = 'Por favor, informe o nome do pet!';
-      if (Platform.OS === 'web') alert(msg);
-      else Alert.alert('Atenção', msg);
-      return;
+    const fail = (msg) => showMessage(Platform, Alert, 'Atenção', msg);
+
+    if (!name.trim()) return fail('Por favor, informe o nome do pet!');
+
+    const weightValue = weight.trim() === '' ? 5 : parseDecimal(weight);
+    if (!(weightValue >= LIMITS.weightKg.min && weightValue <= LIMITS.weightKg.max)) {
+      return fail(`Peso inválido. Informe um valor entre ${LIMITS.weightKg.min} e ${LIMITS.weightKg.max} kg (ex: 12,5).`);
     }
 
-    if (!foodBrand.trim()) {
-      const msg = 'Por favor, informe qual a ração atual do pet!';
-      if (Platform.OS === 'web') alert(msg);
-      else Alert.alert('Atenção', msg);
-      return;
+    if (!isValidDateString(birthDate)) {
+      return fail('Data de nascimento inválida. Use o formato AAAA-MM-DD (ex: 2023-01-01).');
     }
+
+    const needsHeatDate = !isNeutered && gender === 'female';
+    if (needsHeatDate && !isValidDateString(lastHeatDate)) {
+      return fail('Data do último cio inválida. Use o formato AAAA-MM-DD (ex: 2026-07-20).');
+    }
+
+    const dietCheck = validateDiet({
+      brandName: foodBrand,
+      startDate: foodStartDate,
+      mealInterval: mealIntervalHours,
+      dailyGrams,
+    });
+    if (!dietCheck.ok) return fail(dietCheck.message);
 
     const initialVaccines = existingPet?.vaccines || (
       DEFAULT_VACCINES[species].map((v, i) => ({
@@ -135,18 +154,15 @@ export default function CreatePetScreen({ onSavePet, onCancel, existingPet = nul
       breed,
       gender,
       birthDate,
-      weight: parseFloat(weight) || 5,
+      weight: weightValue,
       isNeutered,
-      lastHeatDate: (!isNeutered && gender === 'female') ? lastHeatDate : null,
+      lastHeatDate: needsHeatDate ? lastHeatDate : null,
       heatCycleDays: 180,
       photoUri,
       avatarBadge,
       avatarColor,
       diet: {
-        brandName: foodBrand.trim(),
-        startDate: foodStartDate,
-        mealIntervalHours: parseInt(mealIntervalHours, 10) || 8,
-        dailyGrams: parseInt(dailyGrams, 10) || 200,
+        ...dietCheck.values,
         lastMealTimestamp: existingPet?.diet?.lastMealTimestamp || new Date().toISOString()
       },
       vaccines: initialVaccines
